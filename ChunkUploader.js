@@ -205,7 +205,11 @@ ChunkUploader.prototype._onChunkComplete = function() {
         }, 20)
 
     } else {
-        this._retry({'status': this.upload_request.status, 'status_text': this.upload_request.statusText, 'attempts_remaining': this.attempts});
+        this._retry(
+            {'status': this.upload_request.status,
+             'status_text': this.upload_request.statusText,
+             'attempts_remaining': this.attempts}
+        );
     }
 };
 
@@ -222,7 +226,11 @@ ChunkUploader.prototype._retry = function(err) {
 
             setTimeout(this._upload(), 20);
         } else {
-            this.onUploadFail({'status': 0, 'status_text': 'Exhausted upload attempts.', 'attempts_remaining': this.attempts});
+            this.onUploadFail(
+                {'status': 0,
+                 'status_text': 'Exhausted upload attempts.',
+                 'attempts_remaining': this.attempts}
+            );
         }
     }
 };
