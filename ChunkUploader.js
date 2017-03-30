@@ -35,9 +35,11 @@ var ChunkUploader = function(opts) {
     this.is_paused = false;
     this.range_end = this.chunk_size;
     this.file_size = this.file.size;
+    this.remaining_attempts = this.attempts;
 
     this.upload_request = new XMLHttpRequest();
     this.upload_request.onload = this._onChunkComplete.bind(this);
+    this.upload_request.onerror = this._retry.bind(this);
 
     this.bytes = 0;
 
@@ -136,8 +138,9 @@ ChunkUploader.prototype._upload = function() {
     /*Do the actual upload of the file.*/
     var self = this, chunk;
 
+    chunk = self.file[self.slice_method](self.range_start, self.range_end);
+
     setTimeout(function(){
-        chunk = self.file[self.slice_method](self.range_start, self.range_end);
 
         if (self.debug) {
             self.bytes += chunk.size;
@@ -169,12 +172,15 @@ ChunkUploader.prototype._upload = function() {
             }
         }
 
-    }, 20)
+    }, 200)
 };
 
 ChunkUploader.prototype._onChunkComplete = function() {
     /*Calculate the size of the chunk and verify if the upload is complete.*/
     if (this.upload_request.status < 300) {
+
+        this.remaining_attempts = this.attempts;
+
         info = {'total': this.file_size, 'loaded': this.range_end};
 
          if (this.onProgressUpload && typeof this.onProgressUpload === 'function'){
@@ -205,33 +211,23 @@ ChunkUploader.prototype._onChunkComplete = function() {
         }, 20)
 
     } else {
-        this._retry(
-            {'status': this.upload_request.status,
-             'status_text': this.upload_request.statusText,
-             'attempts_remaining': this.attempts}
-        );
+        this._retry({'status': this.upload_request.status, 'status_text': this.upload_request.statusText, 'attempts_remaining': this.remaining_attempts});
     }
 };
 
 ChunkUploader.prototype._retry = function(err) {
     /*In case of error, we retry the uplaod from where we stopped.*/
 
-    if (!this.is_paused) {
-        if (this.attempts > 0) {
-            this.attempts -= 1
-            if (this.onUploadError && typeof this.onUploadError === 'function'){
-                //In case we have received a function on parameter, we execute and then we retry doing the upload.
-                this.onUploadError(err);
-            }
-
-            setTimeout(this._upload(), 20);
-        } else {
-            this.onUploadFail(
-                {'status': 0,
-                 'status_text': 'Exhausted upload attempts.',
-                 'attempts_remaining': this.attempts}
-            );
+    if (this.remaining_attempts > 0) {
+        this.remaining_attempts -= 1
+        if (this.onUploadError && typeof this.onUploadError === 'function'){
+            //In case we have received a function on parameter, we execute and then we retry doing the upload.
+            this.onUploadError(err);
         }
+
+        setTimeout(this._upload(), 20);
+    } else {
+        this.onUploadFail({'status': 0, 'status_text': 'Exhausted upload attempts.', 'attempts_remaining': this.remaining_attempts});
     }
 };
 
