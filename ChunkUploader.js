@@ -2,6 +2,7 @@ var ChunkUploader = function(opts) {
     this.defaults = {
         file: null,
         url: null,
+        timeout: 30000,
         method: 'POST',
         chunk_size: (1024 * 100),
         range_start: 0,
@@ -14,6 +15,7 @@ var ChunkUploader = function(opts) {
         onProgressUpload: function () {},
         onUploadError: function (err) {console.log(err);},
         onUploadFail: function (err) {console.log(err);},
+        onTimeOut: function (e) {console.log(e);},
         onStartUpload: function () {}
     }
 
@@ -38,6 +40,7 @@ var ChunkUploader = function(opts) {
     this.remaining_attempts = this.attempts;
 
     this.upload_request = new XMLHttpRequest();
+    this.upload_request.ontimeout = this._onTimeOut.bind(this);
     this.upload_request.onload = this._onChunkComplete.bind(this);
     this.upload_request.onerror = this._retry.bind(this);
 
@@ -110,6 +113,12 @@ ChunkUploader.prototype.get_onStartUpload = function() {
     return this.onStartUpload;
 };
 
+ChunkUploader.prototype.onTimeOut = function() {
+    /*Return the value of onTimeOut.*/
+
+    return this.onTimeOut;
+};
+
 ChunkUploader.prototype.get_is_paused = function() {
     /*Return the value of is_paused*/
 
@@ -136,6 +145,7 @@ ChunkUploader.prototype._onConnectionLost = function() {
 
 ChunkUploader.prototype._upload = function() {
     /*Do the actual upload of the file.*/
+
     var self = this, chunk;
 
     chunk = self.file[self.slice_method](self.range_start, self.range_end);
@@ -151,6 +161,8 @@ ChunkUploader.prototype._upload = function() {
         } else {
 
             self.upload_request.open(self.method, self.url, true);
+
+            self.upload_request.timeout = self.timeout;
 
             if (!self.send_as_form) {
 
@@ -177,6 +189,7 @@ ChunkUploader.prototype._upload = function() {
 
 ChunkUploader.prototype._onChunkComplete = function() {
     /*Calculate the size of the chunk and verify if the upload is complete.*/
+
     if (this.upload_request.status < 300) {
 
         this.remaining_attempts = this.attempts;
@@ -216,7 +229,7 @@ ChunkUploader.prototype._onChunkComplete = function() {
 };
 
 ChunkUploader.prototype._retry = function(err) {
-    /*In case of error, we retry the uplaod from where we stopped.*/
+    /*In case of error, we retry the upload from where we stopped.*/
 
     if (this.remaining_attempts > 0) {
         this.remaining_attempts -= 1
@@ -227,8 +240,23 @@ ChunkUploader.prototype._retry = function(err) {
 
         setTimeout(this._upload(), 20);
     } else {
+        this.upload_request.abort();
         this.onUploadFail({'status': 0, 'status_text': 'Exhausted upload attempts.', 'attempts_remaining': this.remaining_attempts});
     }
+};
+
+ChunkUploader.prototype._onTimeOut = function(e) {
+    /*In case of timeout, we retry the upload from where we stopped.*/
+
+    var self = this;
+
+    if (self.onTimeOut && typeof self.onTimeOut === 'function'){
+        self.onTimeOut(e);
+    }
+
+    setTimeout(function() {
+        self._retry({'status': 1, 'status_text': 'Request timed out.', 'attempts_remaining': self.remaining_attempts});
+    }, 20);
 };
 
 ChunkUploader.prototype.start = function() {
