@@ -47,7 +47,6 @@ var ChunkUploader = function(opts) {
     this.bytes = 0;
 
     if ('onLine' in navigator) {
-        window.addEventListener('online', this._onConnectionFound);
         window.addEventListener('offline', this._onConnectionLost);
     }
     
@@ -131,16 +130,9 @@ ChunkUploader.prototype.get_upload_request = function() {
     return this.upload_request;
 };
 
-ChunkUploader.prototype._onConnectionFound = function() {
-    /*Resume the upload if a connection is found.*/
-
-    this.resume();
-};
-
 ChunkUploader.prototype._onConnectionLost = function() {
-    /*Pause the upload if the connection is lost.*/
-
-    this.pause();
+    /*Retry the upload if the connection is lost.*/
+    this._retry({'status': 2, 'status_text': 'Lost internet connection.', 'attempts_remaining': this.remaining_attempts});
 };
 
 ChunkUploader.prototype._upload = function() {
@@ -206,6 +198,8 @@ ChunkUploader.prototype._onChunkComplete = function() {
         setTimeout(function() {
 
             if (self.range_end === self.file_size) {
+                self.file = null;
+                self.file_size = null;
                 self.onCompleteUpload();
                 return;
             }
